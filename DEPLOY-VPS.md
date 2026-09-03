@@ -1,0 +1,232 @@
+# Deploying ReAdmin to a single VPS
+
+A self-contained deployment: three application processes plus MongoDB, Redis and
+S3-compatible storage, all on one machine, behind Caddy for TLS. Written for an
+OVHcloud VPS running Ubuntu 24.04, but nothing here is OVH-specific — it works
+on any Debian/Ubuntu box with Docker.
+
+The alternative is [README §5](README.md#5-deploying-to-digitalocean-app-platform),
+which splits the same three processes across DigitalOcean App Platform
+components with managed databases. Use that if you would rather pay for managed
+Mongo and Valkey than operate them; use this if you want one flat monthly bill.
+
+Budget two to three hours. Most of it is Roblox and Discord app setup
+([README §2](README.md#2-required-services)), not this document.
+
+---
+
+## What you need first
+
+- A VPS with **at least 4 GB RAM**. `next build` on this dependency tree will
+  not complete in 2 GB. See [step 2](#2-swap) if you are at 4 GB.
+- A domain, with DNS you can edit.
+- Every credential from [README §2](README.md#2-required-services). Have them
+  in hand before you start — the build fails without the complete set.
+
+---
+
+## 1. DNS
+
+Three A records pointing at the VPS's IPv4 address:
+
+| Record | Serves |
+| --- | --- |
+| `panel.example.com` | the Next.js UI |
+| `api.example.com` | the Fastify API and the in-game REST surface |
+| `cdn.example.com` | object storage |
+
+The panel and API **must** be separate hostnames — the panel calls the API
+cross-origin, and the CORS allowlist is keyed on the panel's origin.
+
+Let these propagate before step 6. Caddy requests certificates on first boot,
+and Let's Encrypt will rate-limit you for repeated failures against a name that
+does not yet resolve.
+
+While you are in the OVH panel, set reverse DNS on the IP to your panel
+hostname. Not required, but it helps if you ever send mail from the box.
+
+## 2. Swap
+
+Skip if you have 8 GB or more. At 4 GB, the Next build needs headroom:
+
+```bash
+sudo fallocate -l 4G /swapfile
+sudo chmod 600 /swapfile
+sudo mkswap /swapfile
+sudo swapon /swapfile
+echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
+```
+
+The build will be slow. Runtime is comfortable once it is built.
+
+## 3. Firewall
+
+Only Caddy is exposed. The datastores talk over the internal Docker network and
+publish no host ports.
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+```
+
+> Docker publishes ports by writing iptables rules that bypass ufw. This stack
+> only publishes 80 and 443, so the two agree — but if you ever add a `ports:`
+> entry to another service, it will be internet-facing regardless of what ufw
+> says. Use `expose:` instead.
+
+## 4. Docker
+
+```bash
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker "$USER"
+```
+
+Log out and back in for the group change to apply.
+
+## 5. Clone and configure
+
+```bash
+git clone <your-fork> /opt/readmin
+cd /opt/readmin
+cp .env.example .env
+```
+
+Fill in `.env` completely. It is gitignored; keep it off the repo. Generate the
+secrets with:
+
+```bash
+openssl rand -hex 24   # MONGO_ROOT_PASSWORD (also paste into MONGODB_URI)
+openssl rand -hex 16   # CRYPTO_KEY — exactly 32 chars, see below
+openssl rand -hex 32   # JSON_WEB_TOKEN_SECRET
+openssl rand -hex 20   # CDN_SECRET_ACCESS_KEY
+```
+
+`CRYPTO_KEY` must be **exactly 32 characters** — it is used verbatim as an
+AES-256-CBC key, so `rand -hex 16` (32 hex chars) is the right call. Changing it
+later invalidates every stored OAuth token.
+
+## 6. The edits this fork needs
+
+Four hostnames and one client ID are hardcoded. The deployment fails quietly
+without them — the site loads, but the browser calls `readmin.app`.
+
+| File | Change |
+| --- | --- |
+| [src/utils/trpc.ts](src/utils/trpc.ts#L17-L28) | `production:` entries → your panel and API hostnames |
+| [src/fastifyAPI/index.ts](src/fastifyAPI/index.ts#L33) | `production:` CORS array → your panel origin |
+| [next.config.js](next.config.js#L48) | add your three hostnames to the CSP `default-src` |
+| four files in [README §6](README.md#6-hardcoded-values-you-must-change-when-self-hosting) | Roblox OAuth `client_id` → your own |
+
+Because `NEXT_PUBLIC_*` values and these literals are compiled into the client
+bundle, changing any of them needs a **rebuild**, not just a restart.
+
+> **A note on the build.** `tsconfig.json` excludes `__tests__` from the Next
+> build's type-check. Those integration tests do not compile under the app's
+> tsconfig (149 errors, all missing Jest globals) and would otherwise fail
+> `next build` before it reaches your code. Jest is unaffected — ts-jest
+> compiles the files Jest hands it and does not consult `exclude`, so
+> `npm test` behaves identically before and after this change.
+>
+> Separately, and unrelated to any of the above: `npm test` does not currently
+> run on Node 24 at all. `jest.config.ts` imports `tsconfig.json` without an
+> import attribute, which Node 24 rejects. That is pre-existing on `main` and
+> does not affect the deployment — but do not read a failing `npm test` as
+> something this setup broke.
+
+## 7. Build and start
+
+```bash
+docker compose build
+docker compose up -d
+```
+
+The build mounts your `.env` as a BuildKit secret so `next build` can read it
+without baking secrets into an image layer — `next.config.js` validates the
+whole schema at build time, which is why it needs to be there at all.
+
+Watch the first boot:
+
+```bash
+docker compose logs -f caddy panel api sync
+```
+
+Caddy issuing certificates is the slowest part. `minio-init` creates the bucket
+and exits — a stopped `minio-init` is success, not a failure.
+
+## 8. Verify
+
+```bash
+curl https://panel.example.com/api/health   # {"success":true,"status":"ok"}
+curl https://api.example.com/               # {"success":true,"message":"ReAdmin API"}
+```
+
+Then work [README §7](README.md#7-post-deploy-checklist) — eleven checks that
+prove the Roblox, Discord and storage paths actually function.
+
+## 9. Backups
+
+**Do this before you have data worth losing.** There are no managed snapshots
+here; a nightly dump to off-box storage is the whole backup story.
+
+```bash
+sudo tee /etc/cron.daily/readmin-backup >/dev/null <<'EOF'
+#!/bin/sh
+set -eu
+cd /opt/readmin
+STAMP=$(date +%F)
+docker compose exec -T mongo mongodump \
+  --username "$MONGO_ROOT_USER" --password "$MONGO_ROOT_PASSWORD" \
+  --authenticationDatabase admin --archive --gzip > "/var/backups/readmin-$STAMP.gz"
+find /var/backups -name 'readmin-*.gz' -mtime +14 -delete
+EOF
+sudo chmod +x /etc/cron.daily/readmin-backup
+```
+
+Then copy `/var/backups` off the machine — Backblaze B2, an OVH Storage Box,
+anywhere that is not this VPS. A backup on the box you are backing up is not a
+backup. Restore with `mongorestore --archive --gzip` and test it once, now,
+rather than discovering it does not work later.
+
+Also back up your `.env`. Losing `CRYPTO_KEY` means every stored OAuth token is
+unrecoverable.
+
+## 10. The Roblox modules
+
+Half of ReAdmin runs inside Roblox and is **not** deployed by anything above.
+Until you republish both modules under your own account with your API hostname
+baked in, the panel works, owners can download loaders, and nothing in-game
+records anything.
+
+[README §6.1](README.md#61-the-in-game-roblox-modules) has the four-step loop.
+Do not skip it — this is the failure mode that looks like success.
+
+---
+
+## Operating it
+
+```bash
+docker compose ps                     # what is running
+docker compose logs -f sync           # cron worker output
+docker compose restart api            # restart one process
+git pull && docker compose build && docker compose up -d   # deploy an update
+```
+
+**Never scale `sync`.** The cron jobs are not sharded — a second replica
+duplicates ranking actions, DMs and distributions.
+
+### If something is wrong
+
+| Symptom | Cause |
+| --- | --- |
+| Build fails with `❌ Invalid environment variables` | A value is missing from `.env`. The error names it. |
+| Build fails with `Neither apiKey nor config.authenticator provided` | `STRIPE_SECRET` is blank. `stripe.service.ts` builds its client at import time, so it needs a non-empty value even with billing off — `sk_test_dummy` is enough. |
+| Build is killed with no message | Out of memory. Add swap ([step 2](#2-swap)). |
+| Panel loads, every API call fails CORS | Step 6 — the panel origin is not in the allowlist. |
+| Panel calls `api.readmin.app` | Step 6 — `trpc.ts` still has the hosted hostnames. |
+| Images 403 or link to `minio:9000` | `CDN_ENDPOINT` must be the public `https://cdn.…` hostname. Presigned URLs are signed against it. |
+| Certificates will not issue | DNS is not resolving to this box yet. Check with `dig`. |
+| Mongo connection times out | `MONGODB_TLS=false` is missing — the client defaults to TLS, the container has no certificate. |

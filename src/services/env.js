@@ -25,6 +25,16 @@ const envSchema = z.object({
   CDN_ENDPOINT: z.string(),
   CDN_BUCKET_NAME: z.string().optional(),
   CDN_REIGON: z.string(),
+  // Self-hosting escape hatches. Both default to the hosted service's
+  // behaviour, so leaving them unset changes nothing.
+  //
+  // 'false' disables TLS on the Mongo connection — needed when Mongo runs as a
+  // container on a private Docker network rather than as a managed cluster.
+  MONGODB_TLS: z.string().optional(),
+  // 'true' switches the S3 client to path-style addressing
+  // (<endpoint>/<bucket>/<key>). Required for MinIO; Spaces uses virtual-host
+  // style, which is the default.
+  CDN_FORCE_PATH_STYLE: z.string().optional(),
   CRYPTO_KEY: z.string(),
   ROBLOX_COOKIE: z.string(),
   ROBLOX_API_KEY: z.string(),

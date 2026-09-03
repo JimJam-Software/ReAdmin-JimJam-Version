@@ -7,7 +7,15 @@ import {
 import { readminCollections } from './mongo.service';
 
 export const s3Client = new S3({
-  forcePathStyle: false,
+  // Spaces and S3 use virtual-host addressing (<bucket>.<endpoint>/<key>),
+  // which is the default. MinIO on a single hostname cannot serve that without
+  // wildcard DNS, so a self-hosted deployment sets CDN_FORCE_PATH_STYLE=true
+  // to get <endpoint>/<bucket>/<key> instead.
+  //
+  // presignUrl below returns the signed URL verbatim, and its signature covers
+  // the endpoint host — so CDN_ENDPOINT must be the *public* CDN hostname, not
+  // an internal service address, or the links it hands the browser are unusable.
+  forcePathStyle: env.CDN_FORCE_PATH_STYLE === 'true',
   endpoint: env.CDN_ENDPOINT,
   region: env.CDN_REIGON,
   credentials: {
