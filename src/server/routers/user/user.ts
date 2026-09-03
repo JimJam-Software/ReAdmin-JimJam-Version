@@ -63,7 +63,7 @@ export const userRouter = router({
   })).mutation(async ({ ctx, input }) => {
     const user = ctx.user;
     const path = input.path;
-    const isTesting = env.STRIPE_PUBLIC.startsWith('pk_test');
+    const isTesting = env.STRIPE_PUBLIC?.startsWith('pk_test') ?? false;
     if (!user.dbUser.stripeId) {
       throw new TRPCError({
         code: 'BAD_REQUEST',

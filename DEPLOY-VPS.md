@@ -235,7 +235,41 @@ Note that Aikido's own Next.js guide targets Next 12–14 with `output:
 'standalone'`. This project is on Next 16 without standalone output, and the
 `-r` preload works there as-is — no standalone migration is needed.
 
-## 11. The Roblox modules
+## 11. Billing is off, and Premium is on
+
+`BILLING_ENABLED=false` in `.env.example`, so **you do not need a Stripe
+account**. This is not a workaround: Premium cannot be purchased on a
+self-hosted instance in the first place. `SUBSCRIPTIONS_CLOSED` in
+`src/services/constants/Subscriptions.ts` is deliberately not host aware,
+because subscriptions bill through ReAdmin's own Stripe account wherever the
+code runs.
+
+With billing off:
+
+- **No Stripe customer is created at login.** This one matters — the call sits
+  on the login path (`auth.service.ts`) and nothing upstream catches it, so a
+  deployment with placeholder Stripe keys fails at login, not at boot.
+- **`POST /internal/billing` returns 404**, rather than trying to verify a
+  signature it has no secret for.
+- **New workspaces are created with `premium.is: true`.** Premium gates real
+  features (activity records, applications, distributions), and with no way to
+  ever purchase it those features would be permanently unreachable.
+
+For a workspace that already exists with Premium off:
+
+```bash
+docker compose exec mongo mongosh -u "$MONGO_ROOT_USER" -p "$MONGO_ROOT_PASSWORD" \
+  --authenticationDatabase admin readmin \
+  --eval 'db.workspace.updateOne({groupId: "YOUR_GROUP_ID"}, {$set: {"premium.is": true}})'
+```
+
+To run *with* real billing instead, set `BILLING_ENABLED=true` and supply
+`STRIPE_PUBLIC`, `STRIPE_SECRET` and `STRIPE_SIGNING_SECRET`. All three then
+become required and the app refuses to start without them. Note that the
+product and price IDs in `stripe.service.ts` still point at ReAdmin's Stripe
+account, so you would need to replace those too.
+
+## 12. The Roblox modules
 
 Half of ReAdmin runs inside Roblox and is **not** deployed by anything above.
 Until you republish both modules under your own account with your API hostname
@@ -264,7 +298,8 @@ duplicates ranking actions, DMs and distributions.
 | Symptom | Cause |
 | --- | --- |
 | Build fails with `❌ Invalid environment variables` | A value is missing from `.env`. The error names it. |
-| Build fails with `Neither apiKey nor config.authenticator provided` | `STRIPE_SECRET` is blank. `stripe.service.ts` builds its client at import time, so it needs a non-empty value even with billing off — `sk_test_dummy` is enough. |
+| `Billing is enabled but STRIPE_… is not set` | Set `BILLING_ENABLED=false` (you almost certainly want this), or supply all three Stripe keys. |
+| Login fails after entering Roblox credentials | `BILLING_ENABLED` is not `false` and the Stripe keys are fake. The login path creates a Stripe customer; bad keys throw and the error is not caught. |
 | Build is killed with no message | Out of memory. Add swap ([step 2](#2-swap)). |
 | Panel loads, every API call fails CORS | Step 6 — the panel origin is not in the allowlist. |
 | Panel calls `api.readmin.app` | Step 6 — `trpc.ts` still has the hosted hostnames. |

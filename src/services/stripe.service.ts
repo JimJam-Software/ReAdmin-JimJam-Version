@@ -2,22 +2,45 @@ import Stripe from 'stripe';
 import { env } from '~/services/env';
 import { User, Workspace } from './NewMongoTypes';
 import { readminCollections } from '~/services/mongo.service';
+/**
+ * Whether this deployment does anything with Stripe at all.
+ *
+ * Premium cannot be sold on a self-hosted instance regardless — see
+ * SUBSCRIPTIONS_CLOSED in constants/Subscriptions, which is deliberately not
+ * host aware because subscriptions bill through ReAdmin's Stripe account
+ * wherever this code runs. With billing off we skip the remaining Stripe calls
+ * entirely, so no Stripe account is needed to run an instance.
+ *
+ * Unset means enabled: the hosted deployment behaves exactly as before.
+ */
+export const BILLING_ENABLED = env.BILLING_ENABLED !== 'false';
+
+// The key is absent when billing is off. The constructor only stores the
+// string, so a placeholder keeps module import side-effect free; every call
+// path that would actually use it is guarded by BILLING_ENABLED.
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-const stripeService = new Stripe(env.STRIPE_SECRET, {
+const stripeService = new Stripe(env.STRIPE_SECRET || 'sk_billing_disabled', {
   //@ts-expect-error ok
   apiVersion: null
 });
 
-export const reAdminProductId = env.STRIPE_PUBLIC.startsWith('pk_test') ? 'prod_P1vkRDvQJs3thH' : 'prod_P22XA4AaEGIGs7'
-export const reAdminSubcriptionId = env.STRIPE_PUBLIC.startsWith('pk_test') ? 'price_1ODrsgFQlpJ67TzVZXg7ZMUP' : 'price_1ODyS0FQlpJ67TzVpN1Haz1M'
-export const reAdminUsageSubcriptionId = env.STRIPE_PUBLIC.startsWith('pk_test') ? 'price_1OLJmhFQlpJ67TzVs1AzzhH8' : 'price_1OLJlfFQlpJ67TzV460ezTYC'
+const isTestMode = env.STRIPE_PUBLIC?.startsWith('pk_test') ?? false;
+
+export const reAdminProductId = isTestMode ? 'prod_P1vkRDvQJs3thH' : 'prod_P22XA4AaEGIGs7'
+export const reAdminSubcriptionId = isTestMode ? 'price_1ODrsgFQlpJ67TzVZXg7ZMUP' : 'price_1ODyS0FQlpJ67TzVpN1Haz1M'
+export const reAdminUsageSubcriptionId = isTestMode ? 'price_1OLJmhFQlpJ67TzVs1AzzhH8' : 'price_1OLJlfFQlpJ67TzV460ezTYC'
 
 // https://discord.com/api/oauth2/authorize?client_id=1077397229792399532&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth&response_type=code&scope=identify%20email
 
 export async function updateStripeUser(
   user: User
-): Promise<Stripe.Customer | Stripe.DeletedCustomer> {
-  const isTesting = env.STRIPE_PUBLIC.startsWith('pk_test');
+): Promise<Stripe.Customer | Stripe.DeletedCustomer | null> {
+  // Called on every login. Without this guard a deployment with no Stripe
+  // credentials throws here and login fails outright.
+  if (!BILLING_ENABLED) {
+    return null;
+  }
+  const isTesting = isTestMode;
   const userObject = {
     name: user.name,
     ...user?.email ? { email: user.email } : {},
@@ -55,6 +78,9 @@ export async function updateStripeUser(
 }
 
 export async function findMeterOrCreate(workspace: Workspace, second = false): Promise<Stripe.Billing.Meter | null> {
+  if (!BILLING_ENABLED) {
+    return null;
+  }
   let meter = null;
   const find = async (last?: string) => {
     const list = await stripeService.billing.meters.list({

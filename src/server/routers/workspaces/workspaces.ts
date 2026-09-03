@@ -18,7 +18,7 @@ import { router } from '~/server/trpc';
 import { readminCollections } from '~/services/mongo.service';
 import { ObjectId } from 'mongodb';
 import { generateSecureString } from '~/services/Crypto-service.service';
-import stripeService, { findMeterOrCreate, findPriceByNameOrCreate, findSetupAssistPriceOrCreate, reAdminSubcriptionId, updateStripeUser } from '~/services/stripe.service';
+import stripeService, { BILLING_ENABLED, findMeterOrCreate, findPriceByNameOrCreate, findSetupAssistPriceOrCreate, reAdminSubcriptionId, updateStripeUser } from '~/services/stripe.service';
 import { env } from '~/services/env';
 import SyncMembers from '~/fastifyAPI/sync/sync-workspaces/members';
 import SyncRoles from '~/fastifyAPI/sync/sync-workspaces/roles';
@@ -243,7 +243,10 @@ export const workspacesRouter = router({
         currentDistribution: 1,
         loaderId: `ReAdmin_Loader_ID=${await generateSecureString(100)}`,
         premium: {
-          is: false,
+          // Premium can never be purchased on a deployment with billing off
+          // (SUBSCRIPTIONS_CLOSED closes it everywhere), so gating features
+          // behind it would just make them permanently unreachable.
+          is: !BILLING_ENABLED,
         },
         tags: [],
         distributionPeriod: 'manual',
@@ -271,10 +274,19 @@ export const workspacesRouter = router({
 
 
       if (redeemPromotion == true) {
+        // The trial rides on a Stripe subscription, so it cannot exist on a
+        // deployment with billing switched off. Workspaces there are created
+        // with Premium already on, so there is nothing to redeem.
+        if (!BILLING_ENABLED) {
+          throw new TRPCError({
+            code: 'BAD_REQUEST',
+            message: 'Billing is disabled on this deployment, so there is no trial to redeem. Premium is already enabled.',
+          });
+        }
         const url = path;
         const ipAddress = '';
 
-        const isTesting = env.STRIPE_PUBLIC.startsWith('pk_test');
+        const isTesting = env.STRIPE_PUBLIC?.startsWith('pk_test') ?? false;
         const group = await getGroupInfo(groupId);
         const dbUser = await readminCollections.user.findOne({ robloxId: user.dbUser.robloxId });
         if (dbUser) {
