@@ -15,6 +15,35 @@ Budget two to three hours. Most of it is Roblox and Discord app setup
 
 ---
 
+## The short version
+
+Everything below is automated by [install.sh](install.sh). On a fresh
+Ubuntu/Debian box:
+
+```bash
+git clone https://github.com/JimJam-Software/ReAdmin-JimJam-Version.git /opt/readmin
+cd /opt/readmin
+sudo ./install.sh
+```
+
+It checks DNS, adds swap if the box is short on RAM, configures ufw, installs
+Docker, generates every secret, prompts for the credentials it cannot generate,
+writes `.env`, then builds and starts the stack. It is safe to re-run — an
+existing `.env` is backed up rather than overwritten, and each step checks
+whether it has already been done.
+
+Useful flags: `--no-build` (write `.env` and stop), `--skip-firewall`,
+`--skip-swap`, `--yes`.
+
+Two things it cannot do for you: **create the DNS records** (step 1 — do this
+first and let it propagate) and **republish the Roblox modules** (step 12).
+
+The rest of this document is the same process by hand, and explains why each
+step is what it is. Read it if the installer fails, or if you would rather not
+run a script as root without knowing what it does.
+
+---
+
 ## What you need first
 
 - A VPS with **at least 4 GB RAM**. `next build` on this dependency tree will
@@ -31,9 +60,9 @@ Three A records pointing at the VPS's IPv4 address:
 
 | Record | Serves |
 | --- | --- |
-| `panel.example.com` | the Next.js UI |
-| `api.example.com` | the Fastify API and the in-game REST surface |
-| `cdn.example.com` | object storage |
+| `panel.jimadmin.costallogic.co` | the Next.js UI |
+| `api.jimadmin.costallogic.co` | the Fastify API and the in-game REST surface |
+| `cdn.jimadmin.costallogic.co` | object storage |
 
 The panel and API **must** be separate hostnames — the panel calls the API
 cross-origin, and the CORS allowlist is keyed on the panel's origin.
@@ -90,7 +119,7 @@ Log out and back in for the group change to apply.
 ## 5. Clone and configure
 
 ```bash
-git clone <your-fork> /opt/readmin
+git clone https://github.com/JimJam-Software/ReAdmin-JimJam-Version.git /opt/readmin
 cd /opt/readmin
 cp .env.example .env
 ```
@@ -159,8 +188,8 @@ and exits — a stopped `minio-init` is success, not a failure.
 ## 8. Verify
 
 ```bash
-curl https://panel.example.com/api/health   # {"success":true,"status":"ok"}
-curl https://api.example.com/               # {"success":true,"message":"ReAdmin API"}
+curl https://panel.jimadmin.costallogic.co/api/health   # {"success":true,"status":"ok"}
+curl https://api.jimadmin.costallogic.co/               # {"success":true,"message":"ReAdmin API"}
 ```
 
 Then work [README §7](README.md#7-post-deploy-checklist) — eleven checks that

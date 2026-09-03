@@ -23,7 +23,8 @@ Read in order — each section assumes the previous one. Skip to §4 if you only
 4. [Local development](#4-local-development) — `.env`, then three commands.
 5. [Deploying](#5-deploying-to-digitalocean-app-platform) — three App Platform components.
    Prefer one VPS and a single flat bill? See [DEPLOY-VPS.md](DEPLOY-VPS.md) instead, which runs
-   the same three processes plus Mongo, Redis and MinIO under Docker Compose on one machine.
+   the same three processes plus Mongo, Redis and MinIO under Docker Compose on one machine —
+   or run [install.sh](install.sh) on a fresh Ubuntu box to do the whole thing automatically.
 6. [Hardcoded values to change](#6-hardcoded-values-you-must-change-when-self-hosting) — ⚠️ easy to
    miss and the deployment silently misbehaves without it. Includes
    [the Roblox modules](#61-the-in-game-roblox-modules), which you must republish under your own
