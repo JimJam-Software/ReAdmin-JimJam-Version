@@ -31,9 +31,9 @@ Three A records pointing at the VPS's IPv4 address:
 
 | Record | Serves |
 | --- | --- |
-| `panel.example.com` | the Next.js UI |
-| `api.example.com` | the Fastify API and the in-game REST surface |
-| `cdn.example.com` | object storage |
+| `panel.jimadmin.costallogic.co` | the Next.js UI |
+| `api.jimadmin.costallogic.co` | the Fastify API and the in-game REST surface |
+| `cdn.jimadmin.costallogic.co` | object storage |
 
 The panel and API **must** be separate hostnames — the panel calls the API
 cross-origin, and the CORS allowlist is keyed on the panel's origin.
@@ -90,7 +90,7 @@ Log out and back in for the group change to apply.
 ## 5. Clone and configure
 
 ```bash
-git clone <your-fork> /opt/readmin
+git clone https://github.com/JimJam-Software/ReAdmin-JimJam-Version.git /opt/readmin
 cd /opt/readmin
 cp .env.example .env
 ```
@@ -159,8 +159,8 @@ and exits — a stopped `minio-init` is success, not a failure.
 ## 8. Verify
 
 ```bash
-curl https://panel.example.com/api/health   # {"success":true,"status":"ok"}
-curl https://api.example.com/               # {"success":true,"message":"ReAdmin API"}
+curl https://panel.jimadmin.costallogic.co/api/health   # {"success":true,"status":"ok"}
+curl https://api.jimadmin.costallogic.co/               # {"success":true,"message":"ReAdmin API"}
 ```
 
 Then work [README §7](README.md#7-post-deploy-checklist) — eleven checks that
