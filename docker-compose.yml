@@ -26,7 +26,11 @@ x-app: &app
 services:
   panel:
     <<: *app
-    command: npm run start
+    # node is invoked directly rather than through `npm run start`. Zen is
+    # preloaded with -r, and npm is itself a Node process — going through it
+    # (or through NODE_OPTIONS) starts a second agent in the npm wrapper,
+    # double-reporting and inflating the instance count in the dashboard.
+    command: node -r @aikidosec/firewall/instrument node_modules/next/dist/bin/next start
     environment:
       PORT: 3000
     healthcheck:
@@ -38,7 +42,7 @@ services:
 
   api:
     <<: *app
-    command: npm run fastify:start
+    command: node -r @aikidosec/firewall/instrument ./apiBuild/fastifyAPI/index
     environment:
       PORT: 3001
     healthcheck:
@@ -52,7 +56,7 @@ services:
   # actions, DMs and distributions. Do not scale this service.
   sync:
     <<: *app
-    command: npm run sync:start
+    command: node -r @aikidosec/firewall/instrument ./apiBuild/fastifyAPI/sync.index
     deploy:
       replicas: 1
 

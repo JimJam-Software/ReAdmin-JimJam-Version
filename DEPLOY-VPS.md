@@ -38,7 +38,7 @@ Three A records pointing at the VPS's IPv4 address:
 The panel and API **must** be separate hostnames — the panel calls the API
 cross-origin, and the CORS allowlist is keyed on the panel's origin.
 
-Let these propagate before step 6. Caddy requests certificates on first boot,
+Let these propagate before step 7. Caddy requests certificates on first boot,
 and Let's Encrypt will rate-limit you for repeated failures against a name that
 does not yet resolve.
 
@@ -59,7 +59,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 The build will be slow. Runtime is comfortable once it is built.
 
-## 3. Firewall
+## 3. Network firewall (ufw)
 
 Only Caddy is exposed. The datastores talk over the internal Docker network and
 publish no host ports.
@@ -194,7 +194,49 @@ rather than discovering it does not work later.
 Also back up your `.env`. Losing `CRYPTO_KEY` means every stored OAuth token is
 unrecoverable.
 
-## 10. The Roblox modules
+## 10. Zen Firewall (Aikido)
+
+Zen is already wired into all three processes — the `command:` entries in
+`docker-compose.yml` preload it with
+`node -r @aikidosec/firewall/instrument`. There is nothing to install; you only
+need to supply a token.
+
+With no `AIKIDO_TOKEN` the agent prints one line saying it is disabled and does
+nothing, so the stack runs fine without an Aikido account.
+
+To turn it on, set the token in `.env` and leave dry mode enabled:
+
+```bash
+AIKIDO_TOKEN=AIK_RUNTIME_your_token_here
+AIKIDO_BLOCK=false
+```
+
+then `docker compose up -d`. Aikido recommend running detection-only for about
+two weeks before setting `AIKIDO_BLOCK=true`, so you find false positives
+without turning them into outages. `AIKIDO_DEBUG=true` makes the agent verbose.
+
+**Do not launch these through `npm run`.** npm is itself a Node process, so a
+preload reaches both it and the app, starting two agents — which double-reports
+and inflates the instance count in your dashboard. The compose commands invoke
+`node` directly for exactly this reason. The same applies to setting
+`NODE_OPTIONS` instead of `-r`.
+
+Verified instrumentation, by process:
+
+| Process | Instruments |
+| --- | --- |
+| `api` | `fastify`, `mongodb`, `undici`, `raw-body`, `node:fs`, `node:http(s)`, `node:path` |
+| `sync` | as above, minus the HTTP server |
+| `panel` | `mongodb`, `node:fs`, `node:http(s)`, `node:path`, `node:vm` |
+
+The panel does not get Fastify-level route context, but it does get `mongodb`,
+so NoSQL injection protection covers the tRPC and SSR paths too.
+
+Note that Aikido's own Next.js guide targets Next 12–14 with `output:
+'standalone'`. This project is on Next 16 without standalone output, and the
+`-r` preload works there as-is — no standalone migration is needed.
+
+## 11. The Roblox modules
 
 Half of ReAdmin runs inside Roblox and is **not** deployed by anything above.
 Until you republish both modules under your own account with your API hostname
