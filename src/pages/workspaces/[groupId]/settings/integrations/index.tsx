@@ -112,7 +112,7 @@ export default function DashboardPage() {
                     className="w-full sm:w-auto"
                     variant={'primary'}
                     size="medium"
-                    href={`https://authorize.roblox.com/?client_id=8369795969584799403&response_type=Code&scope=${[
+                    href={`https://authorize.roblox.com/?client_id=${process.env.NEXT_PUBLIC_ROBLOX_CLIENT_ID}&response_type=Code&scope=${[
                       'openid',
                       'profile',
                       'group:read',
@@ -211,7 +211,7 @@ export default function DashboardPage() {
                     className="w-full sm:w-auto"
                     variant={'primary'}
                     size="medium"
-                    href={`https://authorize.roblox.com/?client_id=8369795969584799403&response_type=Code&scope=${[
+                    href={`https://authorize.roblox.com/?client_id=${process.env.NEXT_PUBLIC_ROBLOX_CLIENT_ID}&response_type=Code&scope=${[
                       'openid',
                       'profile',
                       // 'universe-messaging-service:publish',

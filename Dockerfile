@@ -40,4 +40,8 @@ RUN --mount=type=secret,id=dotenv,target=/app/.env \
     npm run build && npm run fastify:build
 
 ENV NODE_ENV=production
-CMD ["npm", "run", "start"]
+
+# Default to the panel. Compose overrides this per service. Invoked as node
+# directly, not via npm: preloading Zen through an npm wrapper starts a second
+# agent in the wrapper process.
+CMD ["node", "-r", "@aikidosec/firewall/instrument", "node_modules/next/dist/bin/next", "start"]

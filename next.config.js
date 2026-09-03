@@ -45,8 +45,14 @@ module.exports = getConfig({
             value: 'SAMEORIGIN',
           },
           {
+            // readmin.app and cdn.readmin.app are still listed because ~70
+            // asset literals across src/ (default avatars, logos, the upsale
+            // screenshots) still point there. That is the hosted service's
+            // infrastructure and it is being shut down, so those images will
+            // break whenever it goes away — re-host them and drop both hosts
+            // from this list.
             key: 'Content-Security-Policy',
-            value: "default-src 'self' 'unsafe-eval' readmin.app s3.amazonaws.com/cdn.readmin.app/ cdn.readmin.app localhost:3001 *.readmin.dev *.readmin.app localhost *.readmin.app *.roblox.com *.robloxlabs.com *.rbxcdn.com *.discordapp.com *.discord.com rsms.me *.posthog.com *.googletagmanager.com *.google-analytics.com *.gstatic.com *.googleapis.com *.google 'unsafe-inline' blob: data:;"
+            value: "default-src 'self' 'unsafe-eval' panel.jimadmin.costallogic.co api.jimadmin.costallogic.co cdn.jimadmin.costallogic.co localhost:3001 localhost readmin.app cdn.readmin.app *.roblox.com *.robloxlabs.com *.rbxcdn.com *.discordapp.com *.discord.com rsms.me *.posthog.com *.googletagmanager.com *.google-analytics.com *.gstatic.com *.googleapis.com *.google 'unsafe-inline' blob: data:;"
           }
         ],
       },

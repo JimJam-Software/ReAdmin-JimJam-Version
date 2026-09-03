@@ -47,7 +47,7 @@ export const workspaceSettingsBillingRouter = router({
       const url = path;
       const ipAddress = '';
 
-      const isTesting = env.STRIPE_PUBLIC.startsWith('pk_test');
+      const isTesting = env.STRIPE_PUBLIC?.startsWith('pk_test') ?? false;
       const group = await getGroupInfo(workspace.groupId);
       const dbUser = await readminCollections.user.findOne({ robloxId: user.dbUser.robloxId });
       if (dbUser) {
@@ -335,7 +335,7 @@ export const workspaceSettingsBillingRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const { workspace, department, user } = ctx;
-      const isTesting = env.STRIPE_PUBLIC.startsWith('pk_test');
+      const isTesting = env.STRIPE_PUBLIC?.startsWith('pk_test') ?? false;
       if (!user) {
         return;
       }

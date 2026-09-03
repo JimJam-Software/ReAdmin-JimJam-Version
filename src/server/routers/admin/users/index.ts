@@ -224,7 +224,7 @@ export const adminUsersRouter = router({
       readminCollections.orders.deleteMany({ userId: user.robloxId }),
     ])
     try {
-      await stripeService.customers.del(env.STRIPE_SECRET.startsWith('sk_test') ? user.testStripeId || '' : user.stripeId || '');
+      await stripeService.customers.del((env.STRIPE_SECRET?.startsWith('sk_test') ?? false) ? user.testStripeId || '' : user.stripeId || '');
     } catch (e) {
 
     }

@@ -38,7 +38,7 @@ Three A records pointing at the VPS's IPv4 address:
 The panel and API **must** be separate hostnames — the panel calls the API
 cross-origin, and the CORS allowlist is keyed on the panel's origin.
 
-Let these propagate before step 6. Caddy requests certificates on first boot,
+Let these propagate before step 7. Caddy requests certificates on first boot,
 and Let's Encrypt will rate-limit you for repeated failures against a name that
 does not yet resolve.
 
@@ -59,7 +59,7 @@ echo '/swapfile none swap sw 0 0' | sudo tee -a /etc/fstab
 
 The build will be slow. Runtime is comfortable once it is built.
 
-## 3. Firewall
+## 3. Network firewall (ufw)
 
 Only Caddy is exposed. The datastores talk over the internal Docker network and
 publish no host ports.
@@ -109,33 +109,32 @@ openssl rand -hex 20   # CDN_SECRET_ACCESS_KEY
 AES-256-CBC key, so `rand -hex 16` (32 hex chars) is the right call. Changing it
 later invalidates every stored OAuth token.
 
-## 6. The edits this fork needs
+## 6. Fork-specific values
 
-Four hostnames and one client ID are hardcoded. The deployment fails quietly
-without them — the site loads, but the browser calls `readmin.app`.
+**These are already done on this branch** for `jimadmin.costallogic.co`:
 
-| File | Change |
+| File | Set to |
 | --- | --- |
-| [src/utils/trpc.ts](src/utils/trpc.ts#L17-L28) | `production:` entries → your panel and API hostnames |
-| [src/fastifyAPI/index.ts](src/fastifyAPI/index.ts#L33) | `production:` CORS array → your panel origin |
-| [next.config.js](next.config.js#L48) | add your three hostnames to the CSP `default-src` |
-| four files in [README §6](README.md#6-hardcoded-values-you-must-change-when-self-hosting) | Roblox OAuth `client_id` → your own |
+| [src/utils/trpc.ts](src/utils/trpc.ts) | `panel.jimadmin.costallogic.co` / `api.jimadmin.costallogic.co` |
+| [src/fastifyAPI/index.ts](src/fastifyAPI/index.ts) | CORS allows `https://panel.jimadmin.costallogic.co` |
+| [next.config.js](next.config.js) | CSP allows all three hostnames |
+| the four Roblox authorize URLs | now read `NEXT_PUBLIC_ROBLOX_CLIENT_ID` |
 
-Because `NEXT_PUBLIC_*` values and these literals are compiled into the client
-bundle, changing any of them needs a **rebuild**, not just a restart.
+The Roblox client ID is no longer hardcoded in four files — set
+`NEXT_PUBLIC_ROBLOX_CLIENT_ID` in `.env` (same value as `ROBLOX_CLIENT_ID`).
+It is a required variable, so the build fails loudly if you forget it rather
+than shipping a login button that cannot work.
 
-> **A note on the build.** `tsconfig.json` excludes `__tests__` from the Next
-> build's type-check. Those integration tests do not compile under the app's
-> tsconfig (149 errors, all missing Jest globals) and would otherwise fail
-> `next build` before it reaches your code. Jest is unaffected — ts-jest
-> compiles the files Jest hands it and does not consult `exclude`, so
-> `npm test` behaves identically before and after this change.
->
-> Separately, and unrelated to any of the above: `npm test` does not currently
-> run on Node 24 at all. `jest.config.ts` imports `tsconfig.json` without an
-> import attribute, which Node 24 rejects. That is pre-existing on `main` and
-> does not affect the deployment — but do not read a failing `npm test` as
-> something this setup broke.
+Because these literals and every `NEXT_PUBLIC_*` value are compiled into the
+client bundle, changing any of them needs a **rebuild**, not just a restart.
+
+> **Still pointing at the hosted service:** roughly 70 asset URLs across `src/`
+> (default avatars, logos, the upsale screenshots) are hardcoded to
+> `cdn.readmin.app` and `readmin.app`, and both are still allowed in the CSP so
+> they keep loading. That is `readmin.app`'s own infrastructure and it is being
+> shut down — those images will break when it goes. Re-host them in your own
+> bucket and drop both hosts from the CSP when you get a chance. Nothing else
+> depends on them.
 
 ## 7. Build and start
 
@@ -194,7 +193,83 @@ rather than discovering it does not work later.
 Also back up your `.env`. Losing `CRYPTO_KEY` means every stored OAuth token is
 unrecoverable.
 
-## 10. The Roblox modules
+## 10. Zen Firewall (Aikido)
+
+Zen is already wired into all three processes — the `command:` entries in
+`docker-compose.yml` preload it with
+`node -r @aikidosec/firewall/instrument`. There is nothing to install; you only
+need to supply a token.
+
+With no `AIKIDO_TOKEN` the agent prints one line saying it is disabled and does
+nothing, so the stack runs fine without an Aikido account.
+
+To turn it on, set the token in `.env` and leave dry mode enabled:
+
+```bash
+AIKIDO_TOKEN=AIK_RUNTIME_your_token_here
+AIKIDO_BLOCK=false
+```
+
+then `docker compose up -d`. Aikido recommend running detection-only for about
+two weeks before setting `AIKIDO_BLOCK=true`, so you find false positives
+without turning them into outages. `AIKIDO_DEBUG=true` makes the agent verbose.
+
+**Do not launch these through `npm run`.** npm is itself a Node process, so a
+preload reaches both it and the app, starting two agents — which double-reports
+and inflates the instance count in your dashboard. The compose commands invoke
+`node` directly for exactly this reason. The same applies to setting
+`NODE_OPTIONS` instead of `-r`.
+
+Verified instrumentation, by process:
+
+| Process | Instruments |
+| --- | --- |
+| `api` | `fastify`, `mongodb`, `undici`, `raw-body`, `node:fs`, `node:http(s)`, `node:path` |
+| `sync` | as above, minus the HTTP server |
+| `panel` | `mongodb`, `node:fs`, `node:http(s)`, `node:path`, `node:vm` |
+
+The panel does not get Fastify-level route context, but it does get `mongodb`,
+so NoSQL injection protection covers the tRPC and SSR paths too.
+
+Note that Aikido's own Next.js guide targets Next 12–14 with `output:
+'standalone'`. This project is on Next 16 without standalone output, and the
+`-r` preload works there as-is — no standalone migration is needed.
+
+## 11. Billing is off, and Premium is on
+
+`BILLING_ENABLED=false` in `.env.example`, so **you do not need a Stripe
+account**. This is not a workaround: Premium cannot be purchased on a
+self-hosted instance in the first place. `SUBSCRIPTIONS_CLOSED` in
+`src/services/constants/Subscriptions.ts` is deliberately not host aware,
+because subscriptions bill through ReAdmin's own Stripe account wherever the
+code runs.
+
+With billing off:
+
+- **No Stripe customer is created at login.** This one matters — the call sits
+  on the login path (`auth.service.ts`) and nothing upstream catches it, so a
+  deployment with placeholder Stripe keys fails at login, not at boot.
+- **`POST /internal/billing` returns 404**, rather than trying to verify a
+  signature it has no secret for.
+- **New workspaces are created with `premium.is: true`.** Premium gates real
+  features (activity records, applications, distributions), and with no way to
+  ever purchase it those features would be permanently unreachable.
+
+For a workspace that already exists with Premium off:
+
+```bash
+docker compose exec mongo mongosh -u "$MONGO_ROOT_USER" -p "$MONGO_ROOT_PASSWORD" \
+  --authenticationDatabase admin readmin \
+  --eval 'db.workspace.updateOne({groupId: "YOUR_GROUP_ID"}, {$set: {"premium.is": true}})'
+```
+
+To run *with* real billing instead, set `BILLING_ENABLED=true` and supply
+`STRIPE_PUBLIC`, `STRIPE_SECRET` and `STRIPE_SIGNING_SECRET`. All three then
+become required and the app refuses to start without them. Note that the
+product and price IDs in `stripe.service.ts` still point at ReAdmin's Stripe
+account, so you would need to replace those too.
+
+## 12. The Roblox modules
 
 Half of ReAdmin runs inside Roblox and is **not** deployed by anything above.
 Until you republish both modules under your own account with your API hostname
@@ -223,7 +298,8 @@ duplicates ranking actions, DMs and distributions.
 | Symptom | Cause |
 | --- | --- |
 | Build fails with `❌ Invalid environment variables` | A value is missing from `.env`. The error names it. |
-| Build fails with `Neither apiKey nor config.authenticator provided` | `STRIPE_SECRET` is blank. `stripe.service.ts` builds its client at import time, so it needs a non-empty value even with billing off — `sk_test_dummy` is enough. |
+| `Billing is enabled but STRIPE_… is not set` | Set `BILLING_ENABLED=false` (you almost certainly want this), or supply all three Stripe keys. |
+| Login fails after entering Roblox credentials | `BILLING_ENABLED` is not `false` and the Stripe keys are fake. The login path creates a Stripe customer; bad keys throw and the error is not caught. |
 | Build is killed with no message | Out of memory. Add swap ([step 2](#2-swap)). |
 | Panel loads, every API call fails CORS | Step 6 — the panel origin is not in the allowlist. |
 | Panel calls `api.readmin.app` | Step 6 — `trpc.ts` still has the hosted hostnames. |

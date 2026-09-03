@@ -30,7 +30,7 @@ fastify.register(cors, {
         test: ['http://localhost:3000'],
         preview: ['http://localhost:3000'],
         development: ['https://readmin.dev', 'https://panel.readmin.dev', 'http://localhost:3000'],
-        production: ['https://readmin.app', 'https://panel.readmin.app'],
+        production: ['https://panel.jimadmin.costallogic.co'],
     }[env.NEXT_PUBLIC_VERCEL_ENV || 'test'],
     credentials: true,
 })

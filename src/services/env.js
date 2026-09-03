@@ -15,9 +15,19 @@ const envSchema = z.object({
   DISCORD_CLIENT_SECRET: z.string(),
   DISCORD_TOKEN: z.string(),
   ROBLOX_SECRET: z.string(),
-  STRIPE_PUBLIC: z.string(),
-  STRIPE_SECRET: z.string(),
-  STRIPE_SIGNING_SECRET: z.string(),
+  // Optional because a self-hosted instance can run with billing switched off
+  // (BILLING_ENABLED=false). They are still required when billing is on — see
+  // the check below the schema, which fails just as loudly as the schema does.
+  STRIPE_PUBLIC: z.string().optional(),
+  STRIPE_SECRET: z.string().optional(),
+  STRIPE_SIGNING_SECRET: z.string().optional(),
+  // 'false' turns off every Stripe code path: no customer is created at login,
+  // the billing webhook stops accepting requests, and new workspaces are
+  // created with Premium already on. Premium cannot be sold on a self-hosted
+  // instance anyway (SUBSCRIPTIONS_CLOSED in constants/Subscriptions), so the
+  // only thing Stripe was still doing there was breaking login.
+  // Unset means enabled, so the hosted deployment is unaffected.
+  BILLING_ENABLED: z.string().optional(),
   JSON_WEB_TOKEN_SECRET: z.string(),
   CDN_URL: z.string(),
   CDN_ACCESS_KEY_ID: z.string(),
@@ -48,6 +58,11 @@ const envSchema = z.object({
     .optional(),
   ROBLOX_USER_ID: z.string(),
   ROBLOX_CLIENT_ID: z.string(),
+  // Same value as ROBLOX_CLIENT_ID. The authorize URLs are built in the
+  // browser, so this must be NEXT_PUBLIC_ and present at build time — Next
+  // inlines it into the client bundle. Required, so a missing value fails the
+  // build rather than rendering a login button that cannot work.
+  NEXT_PUBLIC_ROBLOX_CLIENT_ID: z.string(),
   ROBLOX_CLIENT_SECRET: z.string(),
   BLOXLINK_TOKEN: z.string(),
   CONTIGUITY_SECRET: z.string(),
@@ -67,6 +82,23 @@ const envSchema = z.object({
 });
 
 const env = envSchema.safeParse(process.env);
+
+if (env.success && env.data.BILLING_ENABLED !== 'false') {
+  const missing = [
+    ['STRIPE_PUBLIC', env.data.STRIPE_PUBLIC],
+    ['STRIPE_SECRET', env.data.STRIPE_SECRET],
+    ['STRIPE_SIGNING_SECRET', env.data.STRIPE_SIGNING_SECRET],
+  ]
+    .filter(([, value]) => !value)
+    .map(([key]) => key);
+  if (missing.length) {
+    console.error(
+      `\u274c Billing is enabled but ${missing.join(', ')} ${missing.length > 1 ? 'are' : 'is'} not set.\n` +
+        '   Set them, or set BILLING_ENABLED=false to run without Stripe.',
+    );
+    process.exit(1);
+  }
+}
 
 if (!env.success) {
   console.error(

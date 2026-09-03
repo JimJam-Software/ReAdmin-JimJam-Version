@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { env } from "~/services/env";
-import stripeService from "~/services/stripe.service";
+import stripeService, { BILLING_ENABLED } from "~/services/stripe.service";
 import { sendReAdminInternalWebhookMessage } from "~/services/discord.service";
 import { readminCollections } from "~/services/mongo.service";
 import { FastifyReply, FastifyRequest } from 'fastify';
@@ -11,6 +11,13 @@ export const billingHandler = async (req: FastifyRequest<{
     Headers: { ['stripe-signature']?: string;['Stripe-Signature']?: string; };
     Body: any;
 }>, res: FastifyReply) => {
+    // Nothing bills through this deployment, and without a signing secret the
+    // signature check below cannot be performed — so refuse rather than
+    // process an unverifiable payload.
+    if (!BILLING_ENABLED || !env.STRIPE_SIGNING_SECRET) {
+        return res.status(404).send({ error: 'Billing is not enabled on this deployment' });
+    }
+    const signingSecret = env.STRIPE_SIGNING_SECRET;
     try {
         let stripeEvent: Stripe.Event = {} as Stripe.Event;
         const { headers } = req;
@@ -24,7 +31,7 @@ export const billingHandler = async (req: FastifyRequest<{
             stripeEvent = stripeService.webhooks.constructEvent(
                 req.rawBody as any,
                 signature,
-                env.STRIPE_SIGNING_SECRET,
+                signingSecret,
                 300
             );
             sendReAdminInternalWebhookMessage('billing', 'green', `Processing new stripe Event ${stripeEvent.type}`, `stripeEvent ID: ${stripeEvent.id}`);
