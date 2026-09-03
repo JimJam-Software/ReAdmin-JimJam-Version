@@ -1,0 +1,44 @@
+# Caddy fetches and renews Let's Encrypt certificates automatically for every
+# hostname below. The three names must already have A records pointing at this
+# VPS before the stack starts, or issuance fails.
+
+{
+	email {$ACME_EMAIL}
+}
+
+# The panel: Next.js UI and SSR.
+{$PANEL_DOMAIN} {
+	encode gzip zstd
+	reverse_proxy panel:3000
+}
+
+# The API: tRPC for the panel, REST for the in-game Roblox modules, and the
+# Discord/Stripe webhook receivers.
+#
+# The panel calls this cross-origin, which is why it must be a separate
+# hostname — see the CORS allowlist in src/fastifyAPI/index.ts.
+{$API_DOMAIN} {
+	encode gzip zstd
+
+	# Loader payloads and image uploads can be large; the Fastify body limit is
+	# 25 MB, so don't let the proxy be the tighter of the two.
+	request_body {
+		max_size 25MB
+	}
+
+	reverse_proxy api:3001
+}
+
+# Object storage. This must be publicly reachable under the same hostname the
+# app signs URLs with: presigned links are generated against CDN_ENDPOINT and
+# the signature covers the Host header, so this name and CDN_ENDPOINT have to
+# match exactly. Caddy preserves Host on reverse_proxy, which is what keeps
+# those signatures valid.
+{$CDN_DOMAIN} {
+	encode gzip zstd
+
+	reverse_proxy minio:9000 {
+		# MinIO streams large objects; don't buffer them in the proxy.
+		flush_interval -1
+	}
+}

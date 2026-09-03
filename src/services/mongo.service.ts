@@ -3,13 +3,18 @@ import { env } from "~/services/env";
 import * as MongoTypes from "./NewMongoTypes";
 export { MongoTypes };
 
+const mongoTls = env.MONGODB_TLS !== 'false';
+
 export const mongoClient = new MongoClient(env.MONGODB_URI, {
     appName: `${env.APP_NAME}-${env.NODE_ENV}`,
     retryReads: true,
     retryWrites: true,
     serverSelectionTimeoutMS: 30000,
-    ssl: true,
-    tls: true,
+    // Managed clusters (DigitalOcean, Atlas) require TLS. A self-hosted Mongo
+    // container on a private Docker network has no certificate, so set
+    // MONGODB_TLS=false there. Anything other than 'false' keeps TLS on.
+    ssl: mongoTls,
+    tls: mongoTls,
 });
 
 // Replace single connect() with robust retry logic
