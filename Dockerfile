@@ -22,8 +22,8 @@ WORKDIR /app
 
 # devDependencies are required: `fastify:build` runs tsc.
 ENV NPM_CONFIG_PRODUCTION=false
-COPY package.json package-lock.json* ./
-RUN npm install
+COPY package.json package-lock.json ./
+RUN npm ci
 
 COPY . .
 
