@@ -423,7 +423,7 @@ export default function DashboardPage({ shuttingDown }: { shuttingDown: boolean 
                 variant="primary"
                 size="medium"
                 className='w-full mt-4'
-                href={`https://authorize.roblox.com/?client_id=8369795969584799403&response_type=Code&scope=${[
+                href={`https://authorize.roblox.com/?client_id=${process.env.NEXT_PUBLIC_ROBLOX_CLIENT_ID}&response_type=Code&scope=${[
                   'openid',
                   'profile',
                   'group:read',

@@ -14,7 +14,7 @@ export function getBaseUrl(forSite: boolean = true) {
   if (forSite) {
     return {
       unknown: isClient ? window.location.origin : `http://localhost:${process.env.PORT ?? 3000}`,
-      production: 'https://panel.readmin.app',
+      production: 'https://panel.jimadmin.costallogic.co',
       // preview: `https://${process.env.VERCEL_ENV}`,
       development: 'https://panel.readmin.dev',
       preview: 'https://panel.readmin.dev',
@@ -22,7 +22,7 @@ export function getBaseUrl(forSite: boolean = true) {
   }
   return {
     unknown: `http://localhost:3001`,
-    production: 'https://api.readmin.app',
+    production: 'https://api.jimadmin.costallogic.co',
     // preview: `https://${process.env.VERCEL_ENV}`,
     development: 'https://api.readmin.dev',
     preview: 'https://api.readmin.dev',

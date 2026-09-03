@@ -48,6 +48,11 @@ const envSchema = z.object({
     .optional(),
   ROBLOX_USER_ID: z.string(),
   ROBLOX_CLIENT_ID: z.string(),
+  // Same value as ROBLOX_CLIENT_ID. The authorize URLs are built in the
+  // browser, so this must be NEXT_PUBLIC_ and present at build time — Next
+  // inlines it into the client bundle. Required, so a missing value fails the
+  // build rather than rendering a login button that cannot work.
+  NEXT_PUBLIC_ROBLOX_CLIENT_ID: z.string(),
   ROBLOX_CLIENT_SECRET: z.string(),
   BLOXLINK_TOKEN: z.string(),
   CONTIGUITY_SECRET: z.string(),

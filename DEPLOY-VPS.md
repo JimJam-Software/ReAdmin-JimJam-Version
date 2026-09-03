@@ -109,33 +109,32 @@ openssl rand -hex 20   # CDN_SECRET_ACCESS_KEY
 AES-256-CBC key, so `rand -hex 16` (32 hex chars) is the right call. Changing it
 later invalidates every stored OAuth token.
 
-## 6. The edits this fork needs
+## 6. Fork-specific values
 
-Four hostnames and one client ID are hardcoded. The deployment fails quietly
-without them — the site loads, but the browser calls `readmin.app`.
+**These are already done on this branch** for `jimadmin.costallogic.co`:
 
-| File | Change |
+| File | Set to |
 | --- | --- |
-| [src/utils/trpc.ts](src/utils/trpc.ts#L17-L28) | `production:` entries → your panel and API hostnames |
-| [src/fastifyAPI/index.ts](src/fastifyAPI/index.ts#L33) | `production:` CORS array → your panel origin |
-| [next.config.js](next.config.js#L48) | add your three hostnames to the CSP `default-src` |
-| four files in [README §6](README.md#6-hardcoded-values-you-must-change-when-self-hosting) | Roblox OAuth `client_id` → your own |
+| [src/utils/trpc.ts](src/utils/trpc.ts) | `panel.jimadmin.costallogic.co` / `api.jimadmin.costallogic.co` |
+| [src/fastifyAPI/index.ts](src/fastifyAPI/index.ts) | CORS allows `https://panel.jimadmin.costallogic.co` |
+| [next.config.js](next.config.js) | CSP allows all three hostnames |
+| the four Roblox authorize URLs | now read `NEXT_PUBLIC_ROBLOX_CLIENT_ID` |
 
-Because `NEXT_PUBLIC_*` values and these literals are compiled into the client
-bundle, changing any of them needs a **rebuild**, not just a restart.
+The Roblox client ID is no longer hardcoded in four files — set
+`NEXT_PUBLIC_ROBLOX_CLIENT_ID` in `.env` (same value as `ROBLOX_CLIENT_ID`).
+It is a required variable, so the build fails loudly if you forget it rather
+than shipping a login button that cannot work.
 
-> **A note on the build.** `tsconfig.json` excludes `__tests__` from the Next
-> build's type-check. Those integration tests do not compile under the app's
-> tsconfig (149 errors, all missing Jest globals) and would otherwise fail
-> `next build` before it reaches your code. Jest is unaffected — ts-jest
-> compiles the files Jest hands it and does not consult `exclude`, so
-> `npm test` behaves identically before and after this change.
->
-> Separately, and unrelated to any of the above: `npm test` does not currently
-> run on Node 24 at all. `jest.config.ts` imports `tsconfig.json` without an
-> import attribute, which Node 24 rejects. That is pre-existing on `main` and
-> does not affect the deployment — but do not read a failing `npm test` as
-> something this setup broke.
+Because these literals and every `NEXT_PUBLIC_*` value are compiled into the
+client bundle, changing any of them needs a **rebuild**, not just a restart.
+
+> **Still pointing at the hosted service:** roughly 70 asset URLs across `src/`
+> (default avatars, logos, the upsale screenshots) are hardcoded to
+> `cdn.readmin.app` and `readmin.app`, and both are still allowed in the CSP so
+> they keep loading. That is `readmin.app`'s own infrastructure and it is being
+> shut down — those images will break when it goes. Re-host them in your own
+> bucket and drop both hosts from the CSP when you get a chance. Nothing else
+> depends on them.
 
 ## 7. Build and start
 
